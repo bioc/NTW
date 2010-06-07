@@ -1,0 +1,14 @@
+Package: NTW
+Type: Package
+Title: Predict gene network using an Ordinary Differential Equation (ODE) based method
+Depends: R (>= 2.3.0)
+Imports: mvtnorm, stats, utils
+Version: 0.99.0
+Date: 2010-05-11
+Author: Wei Xiao, Yin Jin, Darong Lai, Xinyi Yang, Yuanhua Liu, Christine Nardini
+Maintainer: Yuanhua Liu <liuyuanhua@picb.ac.cn>
+Description: This package predicts the gene-gene interaction network and identifies the direct transcriptional targets of the perturbation using an ODE (Ordinary Differential Equation) based method.  
+License: GPL-2
+biocViews: Preprocessing, Statistics
+LazyLoad: yes
+

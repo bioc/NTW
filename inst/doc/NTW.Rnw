@@ -1,0 +1,173 @@
+
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+\usepackage{graphics}
+\usepackage{amsmath}
+%\usepackage[authoryear, round]{natbib}
+
+\textwidth=6.2in
+\textheight=8.5in
+\parskip=.3cm
+\oddsidemargin=.1in
+\evensidemargin=.1in
+\headheight=-.3in
+
+\newcommand{\Rfunction}[1]{{\texttt{#1}}}
+\newcommand{\Rcode}[1]{{\texttt{#1}}}
+\newcommand{\Robject}[1]{{\texttt{#1}}}
+\newcommand{\Rpackage}[1]{{\textsf{#1}}}
+\newcommand{\Rclass}[1]{{\textit{#1}}}
+
+\DeclareMathOperator{\var}{var}
+
+% \VignetteIndexEntry{NTW vignette}
+\author{Wei Xiao, Yin Jin, Darong Lai, Xinyi Yang, Yuanhua Liu, Christine Nardini}
+
+\begin{document}
+
+\title{Predict gene networks using Ordinary Differential Equation (ODE) based method}
+
+\date{}
+\maketitle
+
+\section{Introduction}
+
+{\bf GOAL:} The \Rpackage{NTW} package allows the computation of the interaction network of n genes (\verb@A@, nxn) based on m independent experiments collecting gene expression profiles (\verb@X@, nxm) with or without the associated transcriptional pertubation matrix (\verb@P@, nxm, contains the direct targets of each of the m perturbation done on the system). The approach is based on ordinary differential equations (ODE) and 3 options for multiple regression.
+
+The input data (\verb@X@) is in tabular form (nxm) where rows represents different genes (n), columns represents perturbation or samples (m) and the content of the tables' cells is the abundance of the gene in the sample. Microarray experiments are the data of choice of this application, but the method can be applied to any data in the appropriate format (miRNA arrays, RNA-seq data, etc.). The results are two matrixes. The first one is \Rcode{est.A} (nxn), where each cell represents the association computed among the corresponding genes. Because of the computation method, the elements of \verb@A@, corresponding to gene-gene interactions will often be named regressors in the following. The second one is \Rcode{est.P} (nxm), where each cell ($P_{il}$) represents the transcriptional perturbation of gene $i$ in experiment $l$. $P_{il}=1$ indicates that gene $i$ is directly perturbed in perturbation {\it l}.   If an option of basing on some prior estimation is chosen, an initial guess of matrix \verb@A@, called \Rcode{pred.net} (nxn) in the program, can be input set, the default value is NULL. 
+
+Like the other gene-network reconstruction methods described in \cite{gardner03, nelander08}, NTW (Network of Transcripts Wirings) is an Ordinary Differential Equations (ODE) based model. This approach frames the reverse engineering problem with the flexible identification of a function that describes the variation of a gene's expression across $m$ experiments, $\underline x$ ($m$ dimensional vector), over time as: 
+\begin{equation}
+\label{vecEq}
+\underline x' = f(\underline x,\underline p)
+\end{equation}
+where $f$ models how the transcriptional perturbations $\underline p$ lead to the new equilibria in $\underline x$. As stated in \cite{gardner03}, we used an approximated version of this approach, leading to the linearized matricial form, 
+\begin{equation}
+\label{linearode}
+AX=-P
+\end{equation}
+where $A$ represents the interaction network (adjacency matrix, $n \times n$), $X$ the steady state expression values (expression matrix, $n\times m$), and $P$ the transcriptional perturbations (also an expression matrix, $n\times m$).  
+Differently from the original work in \cite{gardner03, nelander08}, NTW can reconstruct $A$ in the absence of a known matrix $P$, since transcriptional perturbations $P$ can be an important unknown of the problem when reconstructing gene networks.
+Namely, NTW processes $X$ to rank genes in each experiment by their absolute expression values, and selects $TopK$
+genes with the highest values as potential target genes. It then produces a Boolean matrix $IX$ where $ix_{ij}=1$ if entry $x_{ij}$ in matrix $X$ is a potential transcriptional trigger, and $ix_{ij}=0$ otherwise.
+Matrix $A$ can then be computed row-wise by using multiple regression of each row of $P$ on the corresponding row of $X$. 
+To compute the $i_{th}$ row $a^{T}_{i}$ of $A$, NTW iteratively searches an optimal vector $P_{i}$ as the $i_{th}$ row of $P$. 
+The searching space of $P_{i}$ consists of a non-empty subset of the power set $S=2^{k|IX_{ik} \ne 0, 1\le k\le m }$. 
+As a result, the cardinality of the searching space of $P_{i}$ is $2^{|S|}-1$, where $|S|$ represents the number of elements in set $S$. Given the upper value of $TopK$, the number of non-zero entries in each row of $IX$ is small and so is the cardinality of $S$ and the searching space of $P_{i}$. The identification of optimal $P_{i}$ and thus $a^{T}_{i}$ is then done through any of regression methods. 
+
+\Rpackage{NTW} offers different approaches for the inference of \verb@A@ using \verb@X@ (and \verb@P@).
+In particular, to solve Equation\,\ref{linearode}, \Rpackage{NTW} can use the following methods: \Rcode{geo} (error-in-variable model), \Rcode{sse} (ordinary linear regression) and \Rcode{ml} (maximum likelihood method).
+The result are the estimated gene interaction network (\verb@A@) and, when unknown as input, transcriptional perturbation matrix (\verb@P@). 
+\Rpackage{NTW} also offers an option to input prior knowledge of the network \verb@A@, when necessary or available (for example from literature).
+Basically, when some of the regressors of A are known, \Rfunction{NTW} can receive as input an extra matrix (\Rcode{pred.net}) which contains the known regressors.
+The final network \verb@A@ is again estimated using the 3 alternative methods (\Rcode{geo}, \Rcode{sse} and \Rcode{ml}) in \Rfunction{forward} (\Rcode{pred.net} contrains less edges than necessary, typicaly information from literature, or from another algorithm) or \Rfunction{backward} (\Rcode{pred.net} contrains more edges than necessary, typically when estimated by another algorithm).
+
+ Function \Rfunction{NTW} is the main function in this package. It can be used to predict the whole gene interaction network (\verb@A@) and the associated transcriptional pertubation matrix (\verb@P@). 
+The major arguments include: 
+\begin{description}
+\item[\Rcode{cFlag}]{the type of method used, \Rcode{geo},\Rcode{sse} and \Rcode{ml}}  
+\item[\Rcode{pred.net}]{the option for whether a prior estimation of the network is exploited (no prior information if \Rcode{pred.net} is NULL), the final network is estimated based on it via \Rfunction{forward} or \Rfunction{backward} method (see \Rcode{sup.drop}), if there is no prior network estimation, the \Rfunction{backward} method is used as default (in this case it is assumed that the prior network is full)}  
+\item[\Rcode{numP}]{the option to set the maximum number of perturbed times for each gene in all experiments}  
+\item[\Rcode{restK}]{the vector numbers of maximum connections of each gene, a vector with higher numbers leads to longer running time. we suggest 20 to 30 percent of  the number of genes based on the sparsity assumption of gene interaction matrix for reasonable computation time (however computation time can be improved with parallelization, see below)} 
+\item[\Rcode{topD}]{the number of branches in each level of a tree in the grid algorithm: we use a grid algorithm to get the  optimized solution and the process, basically while new regressors are tested the best TopD solutions are preserved to the next step (\Rfunction{forward} or \Rfunction{backward}) to add or delete the following regressor. This generates a tree of solutions. The choice of this value determines the effect as well as the speed of the optimization, we suggests 20 to 30 percent of the number of genes} ; 
+\item[\Rcode{topK}]{the number of potential target genes in each perturbation: to reduce time for calculation, we suggest \Rcode{topK} to be 10 to 20 percent of the number of genes}
+\end{description}
+
+In this package, given a known \verb@P@,  \verb@A@ is estimated row by row with \Rfunction{A.estimation.Srow}. Otherwise, both \verb@A@ and \verb@P@ are estimated with  \Rfunction{AP.estimation.Srow}. 
+\Rfunction{AP.estimation.Srow} and  \Rfunction{A.estimation.Srow} can be used independently so that estimation of each row can be performed in parallel, for improving computation time. 
+
+The functions' dependencies scheme of the \Rpackage{NTW} package is illustrated in Figure\,\ref{fig:fig1}.
+\begin{figure}[!h]
+\begin{center}
+\includegraphics[height=10.5cm]{NTWfunctions.jpg}
+\end{center}
+\caption{Scheme of the functions in NTW package}
+\label{fig:fig1}
+\end{figure}
+
+\itemize{
+\item \Rfunction{NTW}, the main function to estimate the gene interaction matrix \verb@A@ and the perturbation targets matrix \verb@P@.
+\item \Rfunction{P.preestimation}, give a rough estimation of perturbation matrix, according to which a guess of non-zero element in each row of \verb@P@ is made.
+\item \Rfunction{AP.estimation.Srow}, estimation of a single row in gene interaction matrix \verb@A@ and perturbation targets matrix \verb@P@.
+\item \Rfunction{A.estimation.Srow}, estimation of a single row in gene interaction matrix \verb@A@ with \verb@P@ known.
+\item \Rfunction{backward}, estimate the network using a \Rfunction{backward}  mode to treat the prior information, less edges of the genes are considered.
+\item \Rfunction{forward}, estimate the network using a \Rfunction{forward} mode to treat the prior information, more edges of the genes are considered.
+\item \Rfunction{method.geo}, estimate the network using \Rcode{geo} method (objective function: geometric mean) with fixed perturbations.
+\item \Rfunction{method.sse}, estimate the network using \Rcode{sse} method (ordinary linear regression), with fixed perturbations.
+\item \Rfunction{method.ml}, estimate the network using \Rcode{ml} (maximum likelihood method), with fixed perturbations).
+\item \Rfunction{com.matrix}, creates all combinations of regressorsto be tested for \verb@A@, with the chosen regressor method. The most (\Rcode{TopD}) successful compbinations are preserved in the following (\Rfunction{forward} or \Rfunction{backward}) step.
+}
+
+\section{Beginning \Rpackage{NTW}}
+
+We use the RT-PCR data of 9 genes in SOS pathway of \emph{Escherichia coli} \cite{gardner03} to introduce the usage of \Rpackage{NTW} package. The main function in this package is \Rfunction{NTW}, used to estimate the whole gene interaction matrix \verb@A@ and the perturbation targets matrix \verb@P@.  Estimation of a single row of \verb@A@ and \verb@P@ independently is also available with the function \Rfunction{AP.estimation.Srow}. This is to supply a faster computation if large quantity of genes is involved, as individual row prediction can be distributed to several CPUs in parallel.  In addition, the prediction of the single row of \verb@A@ is also possible when \verb@P@ is known. Details are stated below.
+\subsection{\Rfunction{NTW} to estimate the whole gene interaction matrix A and the perturbation targets matrix P}
+<<libPackage>>=
+library(NTW)
+library(mvtnorm)
+@
+Load the SOS pathway data.
+<<loadData>>=
+data(sos.data)
+X<-sos.data
+X<-as.matrix(X)
+X
+@
+Set the parameters in NTW algorithm.
+<<setPara>>=
+restK=rep(ncol(X)-1, nrow(X))
+topD = round(0.6*nrow(X))
+topK = round(0.5*nrow(X))
+numP = round(0.25*nrow(X))
+@
+Input the gene association network \Rcode{pred.net} from literature or some other method if possible. 
+Here we randomly  generate a network  with \verb@1@ to indicate a connection between two genes, and \verb@0@ for no connection. \Rcode{pred.net} must have the same dimensions as \verb@A@. 
+<<genPrior>>=
+pred.net<-matrix(round(runif(nrow(X)*nrow(X), min=0, max=1)), nrow(X), nrow(X))
+pred.net
+@
+Estimate \verb@A@ and \verb@P@ without prior gene association information. Here the regression method is \Rcode{sse}. 
+<<calResult1>>=
+result<-NTW(X, restK, topD, topK, P.known=NULL, cFlag="sse", pred.net = NULL, sup.drop = -1,numP, noiseLevel=0.1)
+result
+@
+Estimate \verb@A@ and \verb@P@ with prior gene association information. Here regression method is \Rcode{geo}. The method to use the prior information is \Rfunction{forward}. \Rcode{sup.drop} is set to \verb@-1@, indicating \Rfunction{backward} approach is chosen. 
+<< calResult2>>=
+result<-NTW(X, restK, topD, topK, P.known=NULL, cFlag="sse", pred.net =pred.net, sup.drop = 1,numP, noiseLevel=0.1)
+result
+@
+Arguments of the function \Rfunction{NTW} here are:
+\begin{itemize}
+\item \Rcode{X}, gene expression data, a matrix with genes as rows and perturbations as columns.
+\item \Rcode{restK}, a vector (length equals to \Rcode{nrow(A)}) with each element to indicate the number of non-zero regressors in the corresponding row of \verb@A@.
+\item \Rcode{topD}, a parameter for keeping the best (lowest error in the optimization function) \Rcode{topD} combinations of non-zero regressors of a single row in \verb@A@.
+\item \Rcode{topK}, the number of possible targets of the perturbations, used for pre-estimate the perturbation targets matrix \verb@P@.
+\item \Rcode{P.known}, a known perturbation matrix with the same dimensions of \verb@X@.
+\item \Rcode{cFlag}, a flag to chose the regression methods:  \Rcode{geo}, \Rcode{sse} and \Rcode{ml}.
+\item \Rcode{pred.net}, a matrix with the same dimensions of \verb@A@ for the prior gene association information.  It can be specified only if \Rcode{cMM.corrected} is \verb@1@. Default is NULL.
+\item \Rcode{sub.drop}, an indication to show the pattern for using the prior gene association information.  \verb@1@ for \Rfunction{forward} pattern and \verb@-1@ for \Rfunction{backward} pattern.
+\item \Rcode{numP}, a number set to limit the possibilities that one gene will be directly targeted by perturbations. That is at most \Rcode{numP} perturbations can directly perturb one gene.
+\item \Rcode{noiseLevel}, only used in \Rcode{ml} method, to indicate the noise level in each perturbed experiment. 
+\end{itemize}
+
+\subsection{\Rfunction{AP.estimation.Srow} to estimate a single row of  A and P}
+<< calResultS >>=
+IX<-P.preestimation(X, topK= round(2*nrow(X)))
+result.Srow<-AP.estimation.Srow(r=1,cMM.corrected = 1, pred.net,X, IX,topD, restK, cFlag="sse",sup.drop = -1, numP, noiseLevel=0.1)
+result.Srow
+@
+The arguments are similar to that in function \Rfunction{NTW} except \Rcode{r} and \Rcode{IX}. \Rcode{r} indicates which row is estimated, while \Rcode{IX} is a pre-estimated \verb@P@ according to gene expression data \Rcode{X} based on the biological fact that each perturbation in one experiment have limited targets.  
+The outputs are the coefficients of row \verb@r@ (\Rcode{A.row}) and a vector to show which perturbations will target the gene of row \verb@r@. 
+
+\subsection{\Rfunction{A.estimation.Srow}  to estimate a single row of A with P known}
+<<calResultSPKnown>>=
+P.known<-matrix(round(runif(nrow(X)*ncol(X), min=0, max=1)), nrow(X), ncol(X))
+result.Srow<-A.estimation.Srow(r=1,cMM.corrected = 1, pred.net, X, P.known, topD, restK, cFlag="ml",sup.drop = -1, noiseLevel=0.1)
+result.Srow
+@
+The arguments are similar to that in the function \Rfunction{AP.estimation.Srow} except \Rcode{P.known}. \Rcode{P.known} is the known \verb@P@. The outputs are the coefficients of row \verb@r@ (\Rcode{A.row}).
+
+ \bibliographystyle{unsrt}  
+  \bibliography{Addendum}
+
+\end{document}

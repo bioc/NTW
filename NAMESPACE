@@ -1,0 +1,15 @@
+importFrom(mvtnorm, dmvnorm)
+importFrom(stats, optim)
+importFrom(utils, combn)
+export(
+P.preestimation,
+NTW,
+AP.estimation.Srow,
+A.estimation.Srow,
+   backward,
+   forward,
+       method.geo, 
+       method.sse, 
+       method.ml,
+comb.matrix
+)
