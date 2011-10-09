@@ -1,0 +1,1 @@
+NTW      update for the small bug in the function NTW.r where topK is argued only when it is non-NULL.
