@@ -44,6 +44,7 @@ function(X,restK,topD,topK=NULL,P.known=NULL,cFlag,pred.net=NULL,sup.drop=-1,num
   	warning("At least one of the element in restK is larger than the gene counts (nrow(X))! The element, which is larger than nrow(X), in restK is useless for regression.")
   	
   	}
+  if(!is.null(topK))
   if(topK>nrow(X))
   {
   	warning("topK should be smaller than the gene counts (nrow(X)).")
